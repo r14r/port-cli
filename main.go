@@ -19,7 +19,7 @@ import (
 //go:embed VERSION
 var version string
 
-const help = "Usage: port-cli update [--crontab] | migrate [--dry-run | --yes] [--only NAME] [--exclude NAME] | --version\n"
+const help = "Usage: port-cli update [--crontab] | migrate [--dry-run | --yes | --ui] [--only NAME] [--exclude NAME] | --version\n"
 
 type runner interface {
 	Query(name string, args ...string) (string, error)
@@ -62,7 +62,7 @@ func (n *names) Set(v string) error {
 }
 
 type options struct {
-	yes, dry bool
+	yes, dry, ui bool
 	only, exclude names
 }
 
@@ -71,10 +71,11 @@ func parseOptions(args []string) (options, error) {
 	f := flag.NewFlagSet("migrate", flag.ContinueOnError)
 	f.BoolVar(&o.yes, "yes", false, "execute safe migrations")
 	f.BoolVar(&o.dry, "dry-run", false, "report only (default)")
+	f.BoolVar(&o.ui, "ui", false, "interactive terminal migration selector")
 	f.Var(&o.only, "only", "select formula (repeatable); explicit review of non-smoke-tested matches")
 	f.Var(&o.exclude, "exclude", "retain formula (repeatable)")
 	if err := f.Parse(args); err != nil { return o, err }
-	if f.NArg() != 0 || (o.yes && o.dry) { return o, errors.New("invalid arguments: choose either --dry-run or --yes") }
+	if f.NArg() != 0 || (o.yes && o.dry) || (o.ui && (o.yes || o.dry || len(o.only) != 0 || len(o.exclude) != 0)) { return o, errors.New("invalid arguments: --ui must be used alone; choose either --dry-run or --yes for non-interactive migration") }
 	return o, nil
 }
 
@@ -116,6 +117,7 @@ func run(args []string) error {
 	if args[0] == "update" { return m.update() }
 	m.brew, err = findExecutable("brew", "/usr/local/bin/brew", "/opt/homebrew/bin/brew")
 	if err != nil { return err }
+	if o.ui { return m.migrateUI() }
 	return m.migrate(o)
 }
 
@@ -151,7 +153,7 @@ func contains(ss []string, name string) bool {
 }
 
 var validName = regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9_.+@-]*$")
-var sensitive = regexp.MustCompile("(?i)^(python.*|node.*|npm|nvm|ruby.*|perl.*|php.*|openjdk.*|go(@.*)?|rust.*|llvm.*|gcc.*|openssl.*|postgresql.*|mysql.*|mariadb.*|redis.*|valkey.*|mongodb.*|sqlite.*|nginx.*|httpd.*|caddy.*|docker.*|colima|lima|qemu.*|ollama|ffmpeg.*|bash|zsh|fish|homebrew.*|brew|macports|ports-cli)$")
+var sensitive = regexp.MustCompile("(?i)^(python.*|node.*|npm|nvm|ruby.*|perl.*|php.*|openjdk.*|go(@.*)?|rust.*|llvm.*|gcc.*|openssl.*|postgresql.*|mysql.*|mariadb.*|redis.*|valkey.*|mongodb.*|sqlite.*|nginx.*|httpd.*|caddy.*|docker.*|colima|lima|qemu.*|ollama|ffmpeg.*|bash|zsh|fish|homebrew.*|brew|macports|ports-cli|port-cli)$")
 
 var aliases = map[string]string{
 	"pkg-config":"pkgconfig", "gnu-sed":"gsed", "gnu-tar":"gnutar", "gnu-getopt":"getopt",
@@ -322,7 +324,7 @@ func (m manager) plan(o options) ([]*row, []*row, string, string, error) {
 			r.Reason = "versioned formula: manual review"
 		case port.Name == "":
 			r.Reason = "no matching port"
-		case smoke[port.Name] == "" && len(o.only) == 0:
+		case smoke[port.Name] == "" && len(o.only) == 0 && !o.ui:
 			r.Status, r.Reason = "REVIEW", "matching port; use --only after reviewing compatibility"
 		default:
 			r.Status = "CANDIDATE"

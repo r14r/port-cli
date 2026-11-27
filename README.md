@@ -36,6 +36,7 @@ sudo install -m 755 dist/port-cli /usr/local/bin/port-cli
 port-cli --version
 port-cli update
 port-cli migrate --dry-run
+port-cli migrate --ui
 port-cli migrate --only llama.cpp --dry-run
 port-cli migrate --only llama.cpp --yes
 port-cli migrate --exclude git --yes
@@ -99,6 +100,30 @@ to run on schedule. Automatic package upgrades can affect running services;
 choose a suitable maintenance window.
 
 `just update-crontab` builds and runs the same mode for testing.
+
+## Interactive migration
+
+Run `port-cli migrate --ui` in a terminal (or `just migrate-ui`).
+All installed formulae and casks are shown. No packages are initially selected.
+Use Up/Down (or j/k), Space to toggle an eligible row, a to toggle all eligible
+rows, n/p to page, Tab to focus **Migrate Selected**, Enter to activate it,
+and q to cancel. The focused package's reason is displayed below the table.
+
+READY and REVIEW can be selected. REVIEW indicates that activation can be
+checked but a predefined executable smoke test is missing. KEEP, CASK and
+BLOCKED remain visible but disabled. The UI computes dependency eligibility
+assuming all otherwise eligible formulae could be selected; a dependency can
+therefore be selectable in the UI when it was BLOCKED in a normal bulk dry run.
+Select its eligible Homebrew dependents as well. If the chosen subset is not
+dependency-safe, the complete selection is rejected before any changes.
+
+After pressing Migrate Selected, the terminal returns to normal mode, the
+selection is replanned and displayed with its verification level. Type y
+to confirm or anything else to cancel. Migration then uses the existing
+install-first, verification, backup and dependency guards. Actual installation
+failures can still produce a partial migration. No protected formula or cask
+can be selected. UI requires an interactive terminal and the system stty
+utility; no extra Go dependencies are needed.
 
 ## Migration policy
 

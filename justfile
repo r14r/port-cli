@@ -49,6 +49,10 @@ update-crontab: build
 migrate-dry-run: build
     ./dist/port-cli migrate --dry-run
 
+# Select packages interactively in the terminal
+migrate-ui: build
+    ./dist/port-cli migrate --ui
+
 # Apply safe migration
 migrate: build
     ./dist/port-cli migrate --yes

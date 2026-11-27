@@ -23,6 +23,7 @@ func (m manager) migrate(o options) error {
 	}
 	fmt.Printf("\nPackages: %d | Ready: %d | Retained: %d\n", len(rows), len(order), len(rows)-len(order))
 	fmt.Println("Catalog matches do not guarantee macOS compatibility, ABI or application-data compatibility.")
+	if o.ui && len(order) != len(o.only) { return errors.New("selection changed or is blocked; no changes made") }
 	if !o.yes || len(order) == 0 { return nil }
 	dir, err := m.backup(rows, raw, installed)
 	if err != nil { return err }
