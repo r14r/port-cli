@@ -41,6 +41,10 @@ ci: test lint build build-macos
 update: build
     ./dist/port-cli update
 
+# Update MacPorts silently with timestamped logs
+update-crontab: build
+    ./dist/port-cli update --crontab
+
 # Preview Homebrew migration
 migrate-dry-run: build
     ./dist/port-cli migrate --dry-run

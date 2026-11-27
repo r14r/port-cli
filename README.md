@@ -1,6 +1,6 @@
 # port-cli
 
-Native Go CLI for maintaining MacPorts and migrating Homebrew formulae on macOS. The executable is named `ports-cli`.
+Native Go CLI for maintaining MacPorts and migrating Homebrew formulae on macOS. The executable is named `port-cli`.
 
 ## Requirements
 
@@ -26,23 +26,79 @@ Without just:
 go test ./...
 go vet ./...
 mkdir -p dist
-CGO_ENABLED=0 go build -trimpath -o dist/ports-cli .
-sudo install -m 755 dist/ports-cli /usr/local/bin/ports-cli
+CGO_ENABLED=0 go build -trimpath -o dist/port-cli .
+sudo install -m 755 dist/port-cli /usr/local/bin/port-cli
 ```
 
 ## Usage
 
 ```sh
-ports-cli --version
-ports-cli update
-ports-cli migrate --dry-run
-ports-cli migrate --only llama.cpp --dry-run
-ports-cli migrate --only llama.cpp --yes
-ports-cli migrate --exclude git --yes
-ports-cli migrate --yes
+port-cli --version
+port-cli update
+port-cli migrate --dry-run
+port-cli migrate --only llama.cpp --dry-run
+port-cli migrate --only llama.cpp --yes
+port-cli migrate --exclude git --yes
+port-cli migrate --yes
 ```
 
 Migration defaults to read-only. Only `--yes` permits installation and removal. Run as your normal user; the CLI invokes sudo only for MacPorts operations. Put /opt/local/bin and /opt/local/sbin before Homebrew on PATH when you are ready to switch.
+
+## Scheduled updates (cron)
+
+```sh
+port-cli update --crontab
+```
+
+This command writes no terminal output after successful log initialization. It
+creates one private, timestamped log per invocation in
+`$HOME/logs/port-cli/update-YYYYMMDD-HHMMSS-*.log`, recording both stdout and stderr,
+the start/end time, commands and outcome. Failures return a nonzero exit code.
+A file lock prevents concurrent cron-mode updates; overlapping invocations log
+a failure and exit. Manual updates are not covered by this lock. Logs are retained
+until you remove them. If logging itself cannot be initialized, an error is
+reported to stderr.
+
+Cron mode uses a fixed standard MacPorts prefix (`/opt/local`), a minimal PATH,
+no stdin, and non-interactive commands:
+
+```sh
+/usr/bin/sudo -n /opt/local/bin/port -N selfupdate
+/usr/bin/sudo -n /opt/local/bin/port -N upgrade outdated
+```
+
+Run as your normal user. Unattended updates require sudo authorization for these
+two exact commands without a password. If this is acceptable for your system,
+use `sudo visudo` to configure the following rule, replacing YOUR_LOGIN with
+your macOS short username (`id -un`). This grants privileged package updates;
+review and trust your MacPorts sources and configuration.
+
+```sudoers
+YOUR_LOGIN ALL=(root) NOPASSWD: /opt/local/bin/port -N selfupdate, /opt/local/bin/port -N upgrade outdated
+```
+
+Do not grant unrestricted passwordless sudo. If authorization is missing,
+the update fails immediately and records the error rather than prompting.
+
+Test the actual command manually and inspect the log before scheduling it:
+
+```sh
+port-cli update --crontab
+echo $?
+ls -lt "$HOME/logs/port-cli"
+```
+
+For example, run daily at 03:00 via your user crontab (`crontab -e`):
+
+```cron
+0 3 * * * /usr/local/bin/port-cli update --crontab
+```
+
+No crontab entry is installed automatically. The Mac must be awake for cron
+to run on schedule. Automatic package upgrades can affect running services;
+choose a suitable maintenance window.
+
+`just update-crontab` builds and runs the same mode for testing.
 
 ## Migration policy
 

@@ -19,7 +19,7 @@ import (
 //go:embed VERSION
 var version string
 
-const help = "Usage: ports-cli update | migrate [--dry-run | --yes] [--only NAME] [--exclude NAME] | --version\n"
+const help = "Usage: port-cli update [--crontab] | migrate [--dry-run | --yes] [--only NAME] [--exclude NAME] | --version\n"
 
 type runner interface {
 	Query(name string, args ...string) (string, error)
@@ -93,7 +93,7 @@ func run(args []string) error {
 		return nil
 	}
 	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
-		fmt.Printf("ports-cli %s\n", strings.TrimSpace(version))
+		fmt.Printf("port-cli %s\n", strings.TrimSpace(version))
 		return nil
 	}
 	if args[0] != "update" && args[0] != "migrate" { return errors.New(help) }
@@ -103,7 +103,7 @@ func run(args []string) error {
 		o, err = parseOptions(args[1:])
 		if errors.Is(err, flag.ErrHelp) { return nil }
 		if err != nil { return err }
-	} else if len(args) != 1 { return errors.New("update takes no arguments") }
+	} else if len(args) != 1 { return errors.New("usage: port-cli update [--crontab]") }
 	if runtime.GOOS != "darwin" { return errors.New("package operations require macOS") }
 	if os.Geteuid() == 0 { return errors.New("run as your normal user; only MacPorts commands use sudo") }
 	for _, key := range []string{"HOMEBREW_NO_AUTO_UPDATE", "HOMEBREW_NO_AUTOREMOVE", "HOMEBREW_NO_ANALYTICS", "HOMEBREW_NO_ASK"} {
@@ -127,6 +127,9 @@ func (m manager) update() error {
 }
 
 func main() {
+	if isCronUpdate(os.Args[1:]) {
+		os.Exit(cronUpdate())
+	}
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "[ERR]", err)
 		os.Exit(1)
