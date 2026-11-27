@@ -232,7 +232,7 @@ func activePorts(s string) map[string]bool {
 }
 
 func (m manager) isActive(name string) (bool, error) {
-	s, err := m.r.Query(m.port, "installed")
+	s, err := m.r.Query(m.port, "installed", name)
 	return activePorts(s)[strings.ToLower(name)], err
 }
 
@@ -397,9 +397,9 @@ func (m manager) applyOne(r *row) error {
 	if err != nil { return err }
 	if !active {
 		if err := m.r.Run(m.sudo, m.port, "install", r.Port); err != nil { return fmt.Errorf("port install failed: %w", err) }
+		active, err = m.isActive(r.Port)
+		if err != nil { return err }
 	}
-	active, err = m.isActive(r.Port)
-	if err != nil { return err }
 	if !active { return errors.New("replacement port is not active") }
 	if binary := smoke[r.Port]; binary != "" {
 		if err := m.r.Run(filepath.Join(filepath.Dir(m.port), binary), "--version"); err != nil { return fmt.Errorf("replacement smoke test failed: %w", err) }

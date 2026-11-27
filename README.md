@@ -126,9 +126,15 @@ Select its eligible Homebrew dependents as well. If the chosen subset is not
 dependency-safe, the complete selection is rejected before any changes.
 
 After pressing Migrate Selected, the terminal returns to normal mode, the
-selection is replanned and displayed with its verification level. Type y
-to confirm or anything else to cancel. Migration then uses the existing
-install-first, verification, backup and dependency guards. Actual installation
+selection is replanned in memory using the initial inventory and dependency
+results, and displayed with its verification level. Type y to confirm or
+anything else to cancel. There is only one full inventory/catalog scan per
+UI invocation. The confirmed plan is executed directly, without rescanning
+the catalog. Each selected package still has live dependency, pin, service
+and activation checks before removal. Avoid concurrent manual package-manager
+changes while the UI is open; restart the UI to refresh its snapshot.
+Migration then uses the existing install-first, verification, backup and
+dependency guards. Actual installation
 failures can still produce a partial migration. No protected formula or cask
 can be selected. UI requires an interactive terminal and the system stty
 utility; no extra Go dependencies are needed.
@@ -147,7 +153,7 @@ All installed formulae and casks are reported. Runtime, database, shell and infr
 
 ## Recovery
 
-Before mutations a timestamped inventory is saved to ~/.local/state/ports-cli/ containing a Brewfile, installed formula metadata, version inventory, installed ports, plan and migration log. This is not a binary, configuration or data backup. Review external consumers such as virtual environments, manually linked binaries and scripts before removal. A Brewfile is an inventory, not an exact version rollback. Consult it and the log if recovery is needed. MacPorts build failures on older macOS releases are possible.
+Before mutations a timestamped inventory is saved to ~/.local/state/ports-cli/ containing a package-only Brewfile generated from the initial scan, installed formula metadata, version inventory, installed formula and cask names, installed ports, plan and migration log. No `brew bundle dump` command is executed: obsolete formula definitions, deprecated third-party casks and VS Code extension/profile failures in that command cannot block this backup. The generated Brewfile lists formulae and casks and explicitly referenced taps; it does not capture VS Code extensions, other Bundle integrations, unreferenced taps, formula options or exact historical versions. Formula versions are taken from the scanned JSON; unavailable metadata is marked unknown. A failed filesystem write or invalid snapshot still aborts before mutation. This is not a binary, configuration or data backup. Review external consumers such as virtual environments, manually linked binaries and scripts before removal. A Brewfile is an inventory, not an exact version rollback. Consult it and the log if recovery is needed. MacPorts build failures on older macOS releases are possible.
 
 ## Development
 

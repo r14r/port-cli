@@ -201,7 +201,7 @@ func choosePackages(rows []*row) ([]string,error) {
 // possible dependency-safe selections, while still disabling protected rows.
 func (m manager) migrateUI(details bool) error {
 	if !details { fmt.Println("Scanning Homebrew inventory and MacPorts catalog...") }
-	rows,_,_,_,err := m.plan(options{ui:true,details:details})
+	rows,_,raw,installed,err := m.plan(options{ui:true,details:details})
 	if err != nil { return err }
 	for _,r := range rows {
 		if r.Status=="READY" && smoke[r.Port]=="" {
@@ -214,8 +214,8 @@ func (m manager) migrateUI(details bool) error {
 	if err != nil { return err }
 	if len(selection)==0 { fmt.Println("Migration cancelled."); return nil }
 	o := options{yes:true,ui:true,details:details,only:names(selection)}
-	fmt.Println("Checking selected packages and dependencies...")
-	checked,order,_,_,err := m.plan(o)
+	fmt.Println("Checking selected packages and dependencies using cached inventory...")
+	checked,order,err := selectedPlan(rows,selection)
 	if err != nil { return err }
 	if len(order)!=len(selection) {
 		fmt.Println("Selection cannot be migrated safely:")
@@ -236,5 +236,5 @@ func (m manager) migrateUI(details bool) error {
 	answer,err := bufio.NewReader(os.Stdin).ReadString('\n')
 	if err != nil && !errors.Is(err,io.EOF) { return err }
 	if !strings.EqualFold(strings.TrimSpace(answer),"y") { fmt.Println("Migration cancelled."); return nil }
-	return m.migrate(o)
+	return m.executePlan(o,checked,order,raw,installed)
 }

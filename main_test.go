@@ -40,7 +40,7 @@ type fakeRunner struct {
 
 func (f *fakeRunner) Query(name string, args ...string) (string, error) {
 	switch strings.Join(args, " ") {
-	case "installed":
+	case "installed jq":
 		if f.active { return "jq @1.7_0 (active)\n", nil }
 		return "None of the specified ports are installed.\n", nil
 	case "uses --installed --recursive --include-optional jq": return f.deps, nil
