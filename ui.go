@@ -199,9 +199,9 @@ func choosePackages(rows []*row) ([]string,error) {
 
 // Include matches without a predefined executable smoke test when computing
 // possible dependency-safe selections, while still disabling protected rows.
-func (m manager) migrateUI() error {
-	fmt.Println("Scanning Homebrew inventory and MacPorts catalog...")
-	rows,_,_,_,err := m.plan(options{ui:true})
+func (m manager) migrateUI(details bool) error {
+	if !details { fmt.Println("Scanning Homebrew inventory and MacPorts catalog...") }
+	rows,_,_,_,err := m.plan(options{ui:true,details:details})
 	if err != nil { return err }
 	for _,r := range rows {
 		if r.Status=="READY" && smoke[r.Port]=="" {
@@ -209,10 +209,11 @@ func (m manager) migrateUI() error {
 			r.Reason="activation check only; no predefined executable smoke test"
 		}
 	}
+	if details { fmt.Println("        Opening migration selector...") }
 	selection,err := choosePackages(rows)
 	if err != nil { return err }
 	if len(selection)==0 { fmt.Println("Migration cancelled."); return nil }
-	o := options{yes:true,ui:true,only:names(selection)}
+	o := options{yes:true,ui:true,details:details,only:names(selection)}
 	fmt.Println("Checking selected packages and dependencies...")
 	checked,order,_,_,err := m.plan(o)
 	if err != nil { return err }

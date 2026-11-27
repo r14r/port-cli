@@ -53,6 +53,10 @@ migrate-dry-run: build
 migrate-ui: build
     ./dist/port-cli migrate --ui
 
+# Select packages with detailed scan progress
+migrate-ui-details: build
+    ./dist/port-cli migrate --ui --details
+
 # Apply safe migration
 migrate: build
     ./dist/port-cli migrate --yes

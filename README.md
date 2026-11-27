@@ -104,6 +104,14 @@ choose a suitable maintenance window.
 ## Interactive migration
 
 Run `port-cli migrate --ui` in a terminal (or `just migrate-ui`).
+For detailed scan progress, run `port-cli migrate --ui --details` or
+`just migrate-ui-details`. It shows actual Homebrew inventory and MacPorts
+catalog counts, package matching, per-candidate dependency checks and the
+final status counts before opening the selector. The progress remains in
+the original terminal screen after leaving the selector. The same flag
+works with non-interactive migration modes and selection revalidation.
+Without it, the existing compact output is unchanged.
+
 All installed formulae and casks are shown. No packages are initially selected.
 Use Up/Down (or j/k), Space to toggle an eligible row, a to toggle all eligible
 rows, n/p to page, Tab to focus **Migrate Selected**, Enter to activate it,

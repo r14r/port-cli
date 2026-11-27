@@ -19,7 +19,7 @@ import (
 //go:embed VERSION
 var version string
 
-const help = "Usage: port-cli update [--crontab] | migrate [--dry-run | --yes | --ui] [--only NAME] [--exclude NAME] | --version\n"
+const help = "Usage: port-cli update [--crontab] | migrate [--dry-run | --yes | --ui] [--only NAME] [--exclude NAME] [--details] | --version\n"
 
 type runner interface {
 	Query(name string, args ...string) (string, error)
@@ -62,7 +62,8 @@ func (n *names) Set(v string) error {
 }
 
 type options struct {
-	yes, dry, ui bool
+	yes, dry, ui, details bool
+	progress io.Writer
 	only, exclude names
 }
 
@@ -72,10 +73,11 @@ func parseOptions(args []string) (options, error) {
 	f.BoolVar(&o.yes, "yes", false, "execute safe migrations")
 	f.BoolVar(&o.dry, "dry-run", false, "report only (default)")
 	f.BoolVar(&o.ui, "ui", false, "interactive terminal migration selector")
+	f.BoolVar(&o.details, "details", false, "show inventory, catalog, comparison and dependency progress")
 	f.Var(&o.only, "only", "select formula (repeatable); explicit review of non-smoke-tested matches")
 	f.Var(&o.exclude, "exclude", "retain formula (repeatable)")
 	if err := f.Parse(args); err != nil { return o, err }
-	if f.NArg() != 0 || (o.yes && o.dry) || (o.ui && (o.yes || o.dry || len(o.only) != 0 || len(o.exclude) != 0)) { return o, errors.New("invalid arguments: --ui must be used alone; choose either --dry-run or --yes for non-interactive migration") }
+	if f.NArg() != 0 || (o.yes && o.dry) || (o.ui && (o.yes || o.dry || len(o.only) != 0 || len(o.exclude) != 0)) { return o, errors.New("invalid arguments: --ui cannot be combined with --yes, --dry-run, --only or --exclude; choose either --dry-run or --yes for non-interactive migration") }
 	return o, nil
 }
 
@@ -117,7 +119,7 @@ func run(args []string) error {
 	if args[0] == "update" { return m.update() }
 	m.brew, err = findExecutable("brew", "/usr/local/bin/brew", "/opt/homebrew/bin/brew")
 	if err != nil { return err }
-	if o.ui { return m.migrateUI() }
+	if o.ui { return m.migrateUI(o.details) }
 	return m.migrate(o)
 }
 
@@ -268,6 +270,7 @@ func schedule(rows []*row) []*row {
 }
 
 func (m manager) plan(o options) ([]*row, []*row, string, string, error) {
+	o.detailf("[01/05] Scanning Homebrew inventory...\n")
 	raw, err := m.r.Query(m.brew, "info", "--json=v2", "--installed")
 	if err != nil { return nil, nil, "", "", err }
 	var inv inventory
@@ -280,6 +283,8 @@ func (m manager) plan(o options) ([]*row, []*row, string, string, error) {
 	if err != nil { return nil, nil, "", "", err }
 	services, err := m.services()
 	if err != nil { return nil, nil, "", "", err }
+	o.detailf("        %d Homebrew packages (%d formulae, %d casks), %d pinned, %d services [OK]\n", len(formulae)+len(casks), len(formulae), len(casks), len(pinned), len(services))
+	o.detailf("[02/05] Scanning MacPorts catalog...\n")
 	p, err := m.r.Query(m.port, "list")
 	if err != nil { return nil, nil, "", "", err }
 	ports := catalog(p)
@@ -287,6 +292,8 @@ func (m manager) plan(o options) ([]*row, []*row, string, string, error) {
 	installed, err := m.r.Query(m.port, "installed")
 	if err != nil { return nil, nil, "", "", err }
 	active := activePorts(installed)
+	o.detailf("        %d catalog entries, %d active ports [OK]\n", len(ports), len(active))
+	o.detailf("[03/05] Comparing %d Homebrew packages with MacPorts catalog...\n", len(formulae)+len(casks))
 	meta := map[string]formula{}
 	for _, f := range inv.Formulae {
 		key := f.FullName
@@ -328,8 +335,6 @@ func (m manager) plan(o options) ([]*row, []*row, string, string, error) {
 			r.Status, r.Reason = "REVIEW", "matching port; use --only after reviewing compatibility"
 		default:
 			r.Status = "CANDIDATE"
-			r.Dependents, err = m.dependents(f)
-			if err != nil { r.Status, r.Reason = "KEEP", "dependency check failed: " + err.Error() }
 		}
 		rows = append(rows, r)
 	}
@@ -337,7 +342,38 @@ func (m manager) plan(o options) ([]*row, []*row, string, string, error) {
 		p := ports[strings.ToLower(c)]
 		rows = append(rows, &row{Brew:c, Port:p.Name, Version:p.Version, Status:"CASK", Reason:"manual GUI migration"})
 	}
-	return rows, schedule(rows), raw, installed, nil
+	matches, candidates := 0, 0
+	for _, r := range rows {
+		if r.Port != "" { matches++ }
+		if r.Status == "CANDIDATE" { candidates++ }
+	}
+	o.detailf("        %d catalog matches, %d potential migration candidates [OK]\n", matches, candidates)
+	o.detailf("[04/05] Checking Homebrew dependencies for %d candidates...\n", candidates)
+	checked, failed := 0, 0
+	for _, r := range rows {
+		if r.Status != "CANDIDATE" { continue }
+		checked++
+		o.detailf("        [%d/%d] %s\n", checked, candidates, safeText(r.Brew))
+		r.Dependents, err = m.dependents(r.Brew)
+		if err != nil {
+			failed++
+			r.Status, r.Reason = "KEEP", "dependency check failed: " + err.Error()
+			o.detailf("                [KEEP] %s\n", safeText(r.Reason))
+		}
+	}
+	o.detailf("        %d dependency checks completed, %d failed (retained) [%s]\n", checked, failed, progressStatus(failed))
+	o.detailf("[05/05] Resolving migration order and package status...\n")
+	order := schedule(rows)
+	counts := map[string]int{}
+	for _, r := range rows {
+		status := r.Status
+		if o.ui && len(o.only) == 0 && status == "READY" && smoke[r.Port] == "" {
+			status = "REVIEW"
+		}
+		counts[status]++
+	}
+	o.detailf("        READY: %d | REVIEW: %d | BLOCKED: %d | KEEP: %d | CASK: %d [OK]\n", counts["READY"], counts["REVIEW"], counts["BLOCKED"], counts["KEEP"], counts["CASK"])
+	return rows, order, raw, installed, nil
 }
 
 func (m manager) removalGuard(r *row) error {

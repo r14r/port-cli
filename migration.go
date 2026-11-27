@@ -11,7 +11,7 @@ import (
 )
 
 func (m manager) migrate(o options) error {
-	fmt.Println("Scanning Homebrew inventory and MacPorts catalog...")
+	if !o.details { fmt.Println("Scanning Homebrew inventory and MacPorts catalog...") }
 	rows, order, raw, installed, err := m.plan(o)
 	if err != nil { return err }
 	if o.yes { fmt.Println("\nMIGRATION PLAN") } else { fmt.Println("\nDRY RUN — no package changes") }
